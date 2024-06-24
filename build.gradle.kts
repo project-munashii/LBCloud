@@ -1,6 +1,7 @@
 plugins {
     kotlin("jvm") version "2.0.0"
     kotlin("plugin.serialization") version "2.0.0"
+    application
 }
 
 group = "me.munashii"
@@ -21,4 +22,8 @@ dependencies {
 
 kotlin {
     jvmToolchain(21)
+}
+
+application {
+    mainClass.set("me.munashii.lbcloud.Entry")
 }
