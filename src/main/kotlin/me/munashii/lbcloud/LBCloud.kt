@@ -79,7 +79,7 @@ object LBCloud {
 
                     if (dbIdentifierCache.containsKey(reqIdentifierComponent)) {
                         println("^: RES: User already registered.")
-                        Response(OK).body("{ \"error\": \"User already registered.\"}")
+                        Response(OK).body("{ \"error\": \"USER_EXISTS\"}")
                     } else {
 
                         println("^: GEN: Generating user token.")
@@ -134,7 +134,7 @@ object LBCloud {
                         Response(OK).body("{ \"user\": \"${db[identifyRequest.token]}\"}")
                     } else {
                         println("^: RES: User not found.")
-                        Response(OK).body("{ \"error\": \"User not found.\"}")
+                        Response(OK).body("{ \"error\": \"USER_404\"}")
                     }
                 }
 
@@ -158,20 +158,89 @@ object LBCloud {
 
                         val userIdentifier = db[uploadRequest.token]!!
 
-                        UserFS.upload(
+                        val status = UserFS.upload(
                             userIdentifier,
                             uploadRequest.location,
                             uploadRequest.name,
                             uploadRequest.data
                         )
 
-                        println("^: RES: File uploaded.")
+                        println("^: RES: Status: ${status.name}.")
 
-                        Response(OK).body("{ \"success\": true }")
+                        Response(OK).body("{ \"result\": \"${status.name}\"}")
                     } else {
                         println("^: RES: User not found.")
-                        Response(UNPROCESSABLE_ENTITY).body("{ \"error\": \"User not found.\"}")
+                        Response(OK).body("{ \"error\": \"USER_404\"}")
                     }
+                }
+
+                "/v1/download" -> {
+                    println(":: /v1/download")
+
+                    @Serializable
+                    data class DownloadRequest(
+                        val token: AuthToken,
+                        val location: String,
+                        val name: String
+                    )
+
+                    val downloadRequest = Json.decodeFromString<DownloadRequest>(request.bodyString())
+
+                    println("^: REQ: $downloadRequest")
+
+                    if (db.containsKey(downloadRequest.token)) {
+                        println("^: RES: User found.")
+
+                        val userIdentifier = db[downloadRequest.token]!!
+
+                        val (status, data) = UserFS.download(
+                            userIdentifier,
+                            downloadRequest.location,
+                            downloadRequest.name
+                        )
+
+                        println("^: RES: Status: ${status.name}.")
+
+                        if (status == UserFS.DownloadStatus.OK) {
+                            Response(OK).body("{ \"data\": \"$data\"}")
+                        } else {
+                            Response(OK).body("{ \"error\": \"FILE_404\"}")
+                        }
+                    } else {
+                        println("^: RES: User not found.")
+                        Response(OK).body("{ \"error\": \"USER_404\"}")
+                    }
+                }
+
+                "/v1/list" -> {
+                    println(":: /v1/list")
+
+                    @Serializable
+                    data class ListRequest
+                    (
+                        val token: AuthToken,
+                        val location: String
+                    )
+
+                    val listRequest = Json.decodeFromString<ListRequest>(request.bodyString())
+
+                    println("^: REQ: $listRequest")
+
+                    if (db.containsKey(listRequest.token)) {
+                        println("^: RES: User found.")
+
+                        val userIdentifier = db[listRequest.token]!!
+
+                        val list = UserFS.list(userIdentifier, listRequest.location)
+
+                        println("^: RES: Found ${list.size} entries.")
+
+                        Response(OK).body("{ \"list\": ${Json.encodeToString(list)} }")
+                    } else {
+                        println("^: RES: User not found.")
+                        Response(OK).body("{ \"error\": \"USER_404\"}")
+                    }
+
                 }
 
                 else -> Response(NOT_FOUND).body("{ \"error\": \"Endpoint not found.\"}")

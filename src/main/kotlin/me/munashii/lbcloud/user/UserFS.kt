@@ -18,7 +18,12 @@ object UserFS {
         }
     }
 
-    fun upload(user: UserIdentifier, location: String, name: String, data: String) {
+    enum class UploadStatus {
+        OK,
+        LIMIT_EXCEEDED
+    }
+
+    fun upload(user: UserIdentifier, location: String, name: String, data: String): UploadStatus {
         while (fsLocks.contains(user)) {
             Thread.sleep(100)
         }
@@ -36,7 +41,7 @@ object UserFS {
         if (fsiData.totalSize + data.length > 3.2e+7) { // 32mb, 16mb of files
             fsLocks.remove(user)
             println(":: UserFS: FS size limit exceeded by user ${user}.")
-            return
+            return UploadStatus.LIMIT_EXCEEDED
         }
 
         val fs = fsiData.schemas.firstOrNull { it.name == location }
@@ -73,6 +78,87 @@ object UserFS {
         fsLocks.remove(user)
 
         println(":: UserFS: File uploaded.")
+
+        return UploadStatus.OK
+    }
+
+    enum class DownloadStatus {
+        OK,
+        NOT_FOUND
+    }
+
+    fun download(user: UserIdentifier, location: String, name: String): Pair<DownloadStatus, String> {
+        while (fsLocks.contains(user)) {
+            Thread.sleep(100)
+        }
+
+        fsLocks.add(user)
+
+        val fsi = getFSIndex(user)
+
+        if (!fsi.exists()) {
+            addUser(user)
+
+            fsLocks.remove(user)
+
+            println(":: UserFS: UserFS index not found for user $user with request: $location/$name")
+            return Pair(DownloadStatus.NOT_FOUND, "")
+        }
+
+        val fsiData = Json.decodeFromString<FSISchema>(fsi.readText())
+
+        val fs = fsiData.schemas.firstOrNull { it.name == location }
+
+        if (fs == null) {
+            fsLocks.remove(user)
+
+            println(":: UserFS: Location not found for user $user with request: $location/$name")
+            return Pair(DownloadStatus.NOT_FOUND, "")
+        }
+
+        val file = fs.files.firstOrNull { it.name == name }
+
+        if (file == null) {
+            fsLocks.remove(user)
+
+            println(":: UserFS: File not found for user $user with request: $location/$name")
+            return Pair(DownloadStatus.NOT_FOUND, "")
+        }
+
+        val data = File("userfs/$user/$location/$name").readText()
+
+        fsLocks.remove(user)
+
+        println(":: UserFS: File downloaded, size: ${data.length} bytes (${data.length/2} after decryption).")
+        return Pair(DownloadStatus.OK, data)
+    }
+
+    fun list(user: UserIdentifier, location: String): List<String> {
+        while (fsLocks.contains(user)) {
+            Thread.sleep(100)
+        }
+
+        fsLocks.add(user)
+
+        val fsi = getFSIndex(user)
+
+        if (!fsi.exists()) {
+            addUser(user)
+
+            fsLocks.remove(user)
+
+            println(":: UserFS: UserFS index not found for user $user.")
+            return emptyList()
+        }
+
+        val fsiData = Json.decodeFromString<FSISchema>(fsi.readText())
+
+        val fsData = fsiData.schemas.firstOrNull { it.name == location }
+
+        fsLocks.remove(user)
+
+        println(":: UserFS: Locations listed for user $user.")
+        return fsData?.files?.map { it.name } ?: emptyList()
     }
 
     fun addUser(user: UserIdentifier) {
