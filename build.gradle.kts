@@ -25,5 +25,5 @@ kotlin {
 }
 
 application {
-    mainClass.set("me.munashii.lbcloud.Entry")
+    mainClass.set("me.munashii.lbcloud.EntryKt")
 }
